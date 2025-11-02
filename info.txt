@@ -1,0 +1,358 @@
+# ASMT 1
+
+- install metamask chrome extension
+- add to chrome, pin it
+- open metamask , signin 
+- create password
+- note down secret backup phrase
+
+///////////////////////////////////////
+
+# ASMT 2 A)
+
+- Install Node.js
+- check : 
+node -v 
+npm -v
+
+create new folder "exp2"
+npm init -y
+npx hardhat --init
+
+📁 Create file:
+ contracts/WavePortal.sol
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract WavePortal {
+    uint256 totalWaves;  // to keep count of total waves
+
+    event NewWave(address indexed from, uint256 timestamp);
+
+    function wave() public {
+        totalWaves += 1;
+        emit NewWave(msg.sender, block.timestamp);
+    }
+
+    function getTotalWaves() public view returns (uint256) {
+        return totalWaves;
+    }
+}
+
+- Compile : npx hardhat compile
+
+create folder scripts
+create new file scripts/deploy.js
+
+const { ethers } = require("hardhat");
+
+async function main() {
+  const WavePortal = await ethers.getContractFactory("WavePortal");
+  const wavePortal = await WavePortal.deploy();
+
+  await wavePortal.waitForDeployment();
+  console.log("WavePortal deployed to:", wavePortal.target);
+
+  let count = await wavePortal.getTotalWaves();
+  console.log("Total waves:", count.toString());
+
+  const waveTxn = await wavePortal.wave();
+  await waveTxn.wait();
+
+  count = await wavePortal.getTotalWaves();
+  console.log("Total waves after waving:", count.toString());
+}
+
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+
+Now deploy locally:
+npx hardhat run scripts/deploy.js
+
+/////////
+Interact using hardhat console:
+To manually interact:
+
+npx hardhat console
+
+Then inside console:
+const WavePortal = await ethers.getContractFactory("WavePortal");
+const wavePortal = await WavePortal.deploy();
+await wavePortal.waitForDeployment();
+
+// check waves count
+(await wavePortal.getTotalWaves()).toString();
+
+// send a wave
+await wavePortal.wave();
+
+// check again
+(await wavePortal.getTotalWaves()).toString();
+
+/////////////////////////////
+
+# ASMT 2 B)
+
+1) Setup - a) Metamask wallet
+
+b) Test Money eth
+- In MetaMask, go to network tab and select "Sepolia". (You may need to toggle "Show test networks" in settings and edit option and then click save).
+- go to Google Faucet Sepolia , select network Etherum Sepolia and address from metamask
+
+c) Alchemy api key 
+- go to dashboard
+- Create new app 
+- Set chain to Ethereum , network to sepolia
+- view key and copy the URL , like : https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY. 
+
+2) Upgrade Your Hardhat Project
+
+A. Install dotenv to keep your keys safe:  npm install dotenv
+
+create .env file , which will contain -
+
+  ALCHEMY_API_URL="https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY"
+  SEPOLIA_PRIVATE_KEY="YOUR_METAMASK_PRIVATE_KEY_HERE"
+
+B. Update hardhat.config.js
+
+require("@nomicfoundation/hardhat-toolbox");
+require("dotenv").config(); // Add this line
+
+// Get the environment variables
+const { ALCHEMY_API_URL, SEPOLIA_PRIVATE_KEY } = process.env;
+
+/** @type import('hardhat/config').HardhatUserConfig */
+module.exports = {
+  solidity: "0.8.28",
+  networks: {
+    // Add this 'sepolia' network configuration
+    sepolia: {
+      url: ALCHEMY_API_URL,
+      accounts: [SEPOLIA_PRIVATE_KEY]
+    }
+  }
+};
+
+C. Update your WavePortal.sol Contract
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import "hardhat/console.sol";
+
+contract WavePortal {
+    uint256 totalWaves;
+    
+    // This is a "struct" - a custom data type
+    struct Wave {
+        address sender; // The address of the person who waved
+        string message;  // The message they sent
+        uint256 timestamp; // The time the wave happened
+    }
+
+    // This is an array that will store all the Wave structs
+    Wave[] waves;
+
+    // This is an "event" - it's like a broadcast.
+    // Our web app can listen for this to know a new wave happened.
+    event NewWave(address indexed sender, string message, uint256 timestamp);
+
+    constructor() {
+        console.log("I am a smart contract, and I am ALIVE!");
+    }
+
+    // This function now takes a '_message' string
+    function wave(string memory _message) public {
+        totalWaves += 1;
+        console.log("%s has waved with message: %s", msg.sender, _message);
+
+        // Add a new Wave struct to our 'waves' array
+        waves.push(Wave(msg.sender, _message, block.timestamp));
+
+        // Emit the event so our web app can see it
+        emit NewWave(msg.sender, _message, block.timestamp);
+    }
+
+    // Gets the total wave count
+    function getTotalWaves() public view returns (uint256) {
+        return totalWaves;
+    }
+
+    // Gets the full array of all Wave structs
+    function getAllWaves() public view returns (Wave[] memory) {
+        return waves;
+    }
+}
+
+Now run : npx hardhat compile
+
+Step 3: Deploy to the Sepolia Testnet
+
+- update deploy.js
+
+const hre = require("hardhat");
+
+async function main() {
+  // Get the "recipe" for the contract
+  const waveContractFactory = await hre.ethers.getContractFactory("WavePortal");
+  
+  // "Deploy" the contract (build it and put it on the blockchain)
+  console.log("Deploying contract to Sepolia...");
+  const waveContract = await waveContractFactory.deploy();
+  
+  // Wait for it to be officially deployed
+  await waveContract.waitForDeployment();
+  
+  // Log the final address
+  const contractAddress = await waveContract.getAddress();
+  console.log("Contract deployed to:", contractAddress);
+}
+
+// Standard pattern to run the 'main' function and catch errors
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+
+Run deployment: 
+npx hardhat run scripts/deploy.js --network sepolia
+
+Success! You have deployed your contract to a public testnet. 
+  ACTION: COPY THIS DEPLOYED ADDRESS to sepolia.etherscan.io to see your contract living on the blockchain.
+
+Step 4: Build Your Web App "Frontend"
+
+- create folder "frontend"
+- create file frontend/index.html 
+
+Copy code from here : 
+https://github.com/Vinay-Basargekar/hardhat_Ethereum/tree/main/frontend
+
+The "Magic" ABI (Application Binary Interface)
+
+Your index.html file has a variable contractABI that is empty. We need to fill it.
+  
+1.In your VS Code project, navigate to this file: artifacts/contracts/WavePortal.sol/WavePortal.json
+2.Open this file. It's a huge JSON file.
+3.Find the key named "abi". It will be followed by a giant array [...].
+4.Copy the entire array, starting from the [ and ending at the ].
+5.Paste this array into the contractABI variable in your index.html file.
+
+Step 5: Run Your Web App!
+
+Live server , download vs code extension
+go live 
+
+to use it :
+-click "connect wallet"
+-type msg in box
+-click "Wave at Me"
+-confirm metamask popup
+- after 10-20 secs , new wave will appear at top of your list 
+
+////////////////////////////
+
+# ASMT 3
+
+1) Setup - a) Metamask wallet 
+b) Google faucet sepolia (for eth , if not present)
+
+2) Remix 
+
+- open https://remix.ethereum.org.
+- create WavePortal.sol
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+contract WavePortal {
+    struct Wave {
+        address waver;
+        string message;
+        uint256 timestamp;
+    }
+    Wave[] public waves;
+    uint256 public totalWaves;
+    event NewWave(address indexed from, string message, uint256 timestamp);
+
+    constructor() {
+        totalWaves = 0;
+    }
+
+    function wave(string memory _message) public {
+        waves.push(Wave(msg.sender, _message, block.timestamp));
+        totalWaves += 1;
+        emit NewWave(msg.sender, _message, block.timestamp);
+    }
+
+    function getAllWaves() public view returns (Wave[] memory) {
+        return waves;
+    }
+
+    function getTotalWaves() public view returns (uint256) {
+        return totalWaves;
+    }
+}
+
+- Click solidity compiler , select compiler near (0.8.20 something) , click compile
+
+- Deploy and run : 1) Environment - Injected Provider - metamask
+2) deploy
+
+- copy last line of testnet website from remix terminal 
+- paste in new window
+
+///////////////////////////////
+
+# ASMT 4
+
+1. create new folder "exp4"
+2. npm init -y
+3. npm install --save-dev hardhat@2.22.15
+5. npx hardhat
+
+6.start node : npx hardhat node
+* It will list 20 test accounts (address, private key)
+* keep terminal open
+
+7. Configure metamask 
+- add custom network 
+Network Name: Hardhat Local
+New RPC URL: http://127.0.0.1:8545
+Chain ID: 31337
+Currency Symbol: ETH
+
+save..
+
+8. Import test account
+- copy the private key of account#0
+- go into account icon , add wallet , import an account
+- paste private key
+- your new account will have 10000 ETH
+
+9. Create a Transaction
+- using new account 
+- click "send" btn , paste the address of account#1 , type amount - 1
+- click next, confirm
+
+- Instantly , 10000 -> 9999 eth
+- in activity lab, you can see  -> send ("confirmed")
+
+
+
+
+
+
+
+
+
+
+
+
